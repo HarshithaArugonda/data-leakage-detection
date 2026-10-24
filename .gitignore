@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.env
+
+# Data and model artifacts (download/regenerate, don't commit)
+data/raw/
+data/processed/
+*.safetensors
+*.bin
+logs/
