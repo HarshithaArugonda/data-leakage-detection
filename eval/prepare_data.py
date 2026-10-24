@@ -191,9 +191,17 @@ def parse_spans(raw: Any) -> list[dict[str, Any]]:
 def convert_pii_row(row: Row) -> Row | None:
     """Convert one Nemotron row to our format, or None if its spans are broken.
 
-    Each span is checked against the text: if text[start:end] does not equal
+    Each span is checked against the text: if text[start:end] does not match
     the span's own text, the row is dropped. Scoring against wrong gold
     offsets would make every scanner look worse (or better) than it is.
+
+    Two quirks in Nemotron-PII that are NOT broken offsets (found by checking
+    all 200k rows, 1.67M spans):
+      * numeric values (age, cvv) are stored as ints, e.g. 42 instead of "42",
+        so we compare str(value);
+      * some span texts are lower-cased ("spanish" for "Spanish" in the
+        document), so the comparison ignores case.
+    After both fixes every span in the dataset matches its offsets.
     """
     text = row.get("text") or ""
     if not text.strip():
@@ -208,7 +216,7 @@ def convert_pii_row(row: Row) -> Row | None:
         start, end, label = int(s["start"]), int(s["end"]), str(s["label"])
         if not 0 <= start < end <= len(text):
             return None
-        if "text" in s and text[start:end] != s["text"]:
+        if "text" in s and text[start:end].lower() != str(s["text"]).lower():
             return None
         spans.append({"start": start, "end": end, "label": map_nemotron_label(label), "source_label": label})
     spans.sort(key=lambda s: (s["start"], s["end"]))

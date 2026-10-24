@@ -115,6 +115,22 @@ def test_convert_pii_row_keeps_unmapped_as_none() -> None:
     assert out is not None and out["spans"][0]["label"] is None
 
 
+def test_convert_pii_row_accepts_numeric_span_text() -> None:
+    """Nemotron stores ages / CVVs as ints. 42 must match the text "42"."""
+    row = {
+        "text": "Age: 42, CVV 731",
+        "spans": "[{'start': 5, 'end': 7, 'text': 42, 'label': 'age'}, "
+        "{'start': 13, 'end': 16, 'text': 731, 'label': 'cvv'}]",
+    }
+    out = convert_pii_row(row)
+    assert out is not None and len(out["spans"]) == 2
+
+
+def test_convert_pii_row_ignores_case_difference() -> None:
+    row = nemo("She is Spanish.", [{"start": 7, "end": 14, "text": "spanish", "label": "race_ethnicity"}])
+    assert convert_pii_row(row) is not None
+
+
 def test_convert_pii_row_drops_wrong_offsets() -> None:
     bad = nemo("Hi Jason", [{"start": 0, "end": 2, "text": "Jason", "label": "first_name"}])
     assert convert_pii_row(bad) is None
