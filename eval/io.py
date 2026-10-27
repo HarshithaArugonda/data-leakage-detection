@@ -1,5 +1,3 @@
-"""Small file helpers: JSON Lines read/write and file hashing."""
-
 from __future__ import annotations
 
 import hashlib
@@ -10,11 +8,7 @@ from typing import Any
 
 
 def write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> int:
-    """Write one JSON object per line. Returns the number of rows written.
-
-    `sort_keys` keeps the bytes identical across runs and machines, so the
-    file hash in the manifest is a real reproducibility check.
-    """
+    # sort_keys so the file (and its hash in the manifest) is identical across runs
     path.parent.mkdir(parents=True, exist_ok=True)
     n = 0
     with path.open("w", encoding="utf-8") as fh:

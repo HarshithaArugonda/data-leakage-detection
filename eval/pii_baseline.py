@@ -1,37 +1,17 @@
-"""PII detection baselines: regex-only vs Presidio-only vs regex + Presidio.
+"""PII baselines: regex only vs presidio only vs both.
 
-Run:
-    uv run python -m eval.pii_baseline              # validation split (default)
-    uv run python -m eval.pii_baseline --split test # final numbers only
+usage: uv run python -m eval.pii_baseline [--split val|test] [--limit N]
 
-Writes:
-    results/pii_baseline_<split>.json   full metrics + run metadata
-    results/pii_baseline_<split>.md     the table for the README
+Defaults to val. Only run --split test for the final numbers, otherwise we end
+up tuning regex rules against the test set.
 
-Why validation by default:
-    While we are still changing regex rules and the policy, every look at
-    test numbers is a chance to tune on test without meaning to. We develop
-    on val and run test once, for the final reported table.
-
-How a span is scored ("overlap match"):
-    * A gold span counts as found (recall) if any prediction of the SAME type
-      overlaps it.
-    * A prediction counts as correct (precision) if it overlaps any gold span
-      of the same type.
-    * Overlap instead of exact boundaries because the dataset labels first
-      and last names as two spans, while Presidio returns "Jason Smith" as one
-      PERSON. Both are right; exact matching would punish that. Exact-boundary
-      recall is reported too, so the gap is visible.
-    * Gold spans whose label we don't map (blood_type, postcode, ...) are
-      "ignore regions": a prediction landing only on one is neither right nor
-      wrong, because the dataset did mark it as PII, just not a type we score.
-    * Predictions of types we don't score (DATE_TIME, NRP, ...) are ignored.
-
-How the three configs are run:
-    Each layer runs once per document, timed. The configs are then built
-    from those cached findings with the exact same post-processing as
-    SensitiveDataScanner.find (score filter + overlap resolution). So one
-    Presidio pass serves two configs, and latency is per layer.
+Scoring (overlap match, per entity type):
+- recall: gold span counts as found if a same-type prediction overlaps it
+- precision: prediction counts as correct if it overlaps a same-type gold span
+- overlap instead of exact match because the data splits "Jason Smith" into
+  two spans and presidio returns one. exact-match recall is still reported.
+- predictions on gold spans we don't map (postcode, blood_type, ...) are ignored
+- predicted types we don't score (DATE_TIME etc.) are ignored
 """
 
 from __future__ import annotations
@@ -64,14 +44,11 @@ CONFIGS: dict[str, tuple[str, ...]] = {
 }
 
 
-# ---------------------------------------------------------------- scoring
+# --- scoring ---
 
 
 @dataclass
 class Counts:
-    """Per-type tallies. Precision and recall use different numerators on
-    purpose (see module docstring), so they are kept separately."""
-
     gold: int = 0  # gold spans of this type
     gold_found: int = 0  # gold spans overlapped by a same-type prediction
     gold_exact: int = 0  # gold spans matched with exact boundaries
@@ -108,7 +85,6 @@ def score_document(
     preds: Sequence[Finding],
     scored_types: Iterable[str] = SCORED_TYPES,
 ) -> dict[str, Counts]:
-    """Score one document. Returns Counts per scored entity type."""
     scored = set(scored_types)
     counts: dict[str, Counts] = {t: Counts() for t in scored}
     gold = [g for g in gold_spans if g["label"] in scored]
@@ -139,11 +115,11 @@ def score_document(
 
 
 def postprocess(raw: Iterable[Finding], policy: Policy) -> list[Finding]:
-    """Same steps as SensitiveDataScanner.find, applied to cached raw findings."""
+    # same steps as SensitiveDataScanner.find
     return resolve_overlaps([f for f in raw if f.score >= policy.min_score], policy)
 
 
-# ---------------------------------------------------------------- run
+# --- run ---
 
 
 @dataclass
@@ -195,7 +171,7 @@ def evaluate(
     return {k: v for k, v in results.items() if v.latency_ms}
 
 
-# ---------------------------------------------------------------- reporting
+# --- reporting ---
 
 
 def _git_commit() -> str | None:
@@ -215,7 +191,7 @@ def _git_commit() -> str | None:
 
 
 def _fmt(x: float | int | None) -> str:
-    return "—" if x is None else f"{x:.3f}"
+    return "-" if x is None else f"{x:.3f}"
 
 
 def to_markdown(report: dict[str, Any]) -> str:

@@ -1,11 +1,3 @@
-"""Shared test helpers.
-
-Fake secrets are built by joining pieces at runtime. If a test file had a
-literal token like "ghp_..." in it, GitHub push protection could reject the
-push, and other secret scanners would flag the repo. Joining strings keeps
-the pattern out of the source while the test still sees the full token.
-"""
-
 from __future__ import annotations
 
 import importlib.util
@@ -17,7 +9,8 @@ from data_leakage_detection.policy import Policy, load_policy
 
 
 def fake(*parts: str) -> str:
-    """Join parts into a fake secret so the literal never appears in source."""
+    # build fake keys at runtime -- a literal "ghp_..." in the repo would trip
+    # GitHub push protection / secret scanners
     return "".join(parts)
 
 

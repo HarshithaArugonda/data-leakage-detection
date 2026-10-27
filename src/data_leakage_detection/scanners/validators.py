@@ -1,9 +1,3 @@
-"""Checksum and format validators used to cut regex false positives.
-
-A 16-digit number is not automatically a card number, and a 9-digit number is
-not automatically an SSN. These checks reject matches that cannot be real.
-"""
-
 from __future__ import annotations
 
 import re
@@ -12,17 +6,12 @@ _NON_DIGIT = re.compile(r"\D")
 
 
 def digits_only(value: str) -> str:
-    """Strip spaces, dashes and anything else that is not a digit."""
     return _NON_DIGIT.sub("", value)
 
 
 def luhn_valid(number: str) -> bool:
-    """Return True if `number` passes the Luhn checksum used by payment cards.
-
-    Walk the digits right to left, double every second digit, subtract 9 from
-    any doubled value above 9, and sum. Valid numbers sum to a multiple of 10.
-    About 90% of random digit strings fail, which is the point.
-    """
+    # standard luhn: from the right, double every 2nd digit (minus 9 if > 9),
+    # sum must be divisible by 10. ~90% of random numbers fail.
     digits = digits_only(number)
     if not 13 <= len(digits) <= 19:
         return False
@@ -38,12 +27,7 @@ def luhn_valid(number: str) -> bool:
 
 
 def ssn_valid(value: str) -> bool:
-    """Return True if `value` is a structurally valid US SSN.
-
-    Rules from the SSA: area (first 3) is not 000, 666, or 900-999; group
-    (middle 2) is not 00; serial (last 4) is not 0000. Also rejects a few
-    well-known fake/advertising numbers.
-    """
+    # SSA rules: area != 000/666/9xx, group != 00, serial != 0000
     digits = digits_only(value)
     if len(digits) != 9:
         return False
@@ -52,4 +36,5 @@ def ssn_valid(value: str) -> bool:
         return False
     if group == "00" or serial == "0000":
         return False
+    # well-known fake / sample SSNs
     return digits not in {"078051120", "219099999", "123456789"}

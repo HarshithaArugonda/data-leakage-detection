@@ -1,31 +1,13 @@
-"""Download the public datasets and write fixed train / val / test splits.
+"""Download the datasets and write train/val/test splits to data/processed/.
 
-Run:
-    uv run python -m eval.prepare_data
+usage: uv run python -m eval.prepare_data
 
-Writes:
-    data/processed/pii/{train,val,test}.jsonl
-    data/processed/injection/{train,val,test}.jsonl
-    data/processed/benign/{train,val,test}.jsonl
-    data/processed/manifest.json   (sources, pinned revisions, licenses, counts, file hashes)
-
-How splits are made, and why:
-    * Where a dataset ships an official test split, we keep it as our test
-      split. Our numbers are then comparable to other people's.
-    * Validation data is carved out of the training split, never the test split.
-      Thresholds get tuned on val; test is touched only for final numbers.
-    * Assignment is by a salted hash of the normalised text, not a random
-      shuffle. Same text -> same bucket on every machine, every run, no
-      matter what order the rows arrive in.
-    * After splitting, any text in test is removed from train and val, and any
-      text in val is removed from train. Duplicates across splits would inflate
-      scores (train/test leakage), which would be an embarrassing bug in a
-      data-leakage project.
-    * Each dataset is pinned to the exact Hugging Face commit it was downloaded
-      at, recorded in the manifest, so a rerun gets the same rows.
-
-Raw data is not committed to git (see .gitignore). Anyone can rebuild it with
-this one command and check the file hashes against the manifest.
+Notes on the splits:
+- official test splits are kept as test; val always comes out of train
+- rows are assigned by hashing the text (not random.shuffle) so the split is
+  the same on any machine regardless of row order
+- anything in test is removed from train/val, anything in val from train
+- dataset revisions + output file hashes go into manifest.json
 """
 
 from __future__ import annotations
@@ -53,8 +35,6 @@ DEFAULT_SALT = "dld-v1"
 
 @dataclass(frozen=True)
 class Source:
-    """A Hugging Face dataset we pull from."""
-
     repo: str
     license: str
     note: str
@@ -68,31 +48,31 @@ SOURCES: dict[str, Source] = {
     "nemotron_pii": Source(
         "nvidia/Nemotron-PII",
         "CC-BY-4.0",
-        "Synthetic English documents with character-offset PII spans. Official train/test.",
+        "synthetic docs w/ char-offset PII spans",
     ),
     "deepset": Source(
         "deepset/prompt-injections",
         "Apache-2.0",
-        "Labelled prompts, 1 = injection, 0 = normal. Official train/test.",
+        "1 = injection, 0 = normal",
     ),
     "gandalf": Source(
         "Lakera/gandalf_ignore_instructions",
         "MIT",
-        "Real 'ignore previous instructions' attacks from the Gandalf game. All positives.",
+        "gandalf game attacks, all label 1",
     ),
     "dolly": Source(
         "databricks/databricks-dolly-15k",
         "CC-BY-SA-3.0",
-        "Human-written instructions, used as normal user traffic for false-positive rate.",
+        "instructions only, used as benign traffic",
     ),
 }
 
 
-# ---------------------------------------------------------------- hashing / splitting
+# --- splitting helpers ---
 
 
 def text_key(text: str) -> str:
-    """Normalise text for duplicate detection: lowercase, collapse whitespace."""
+    # lowercase + collapse whitespace, used for dedup and hashing
     return " ".join(text.lower().split())
 
 
@@ -101,17 +81,14 @@ def text_id(prefix: str, text: str) -> str:
 
 
 def bucket(text: str, salt: str) -> float:
-    """Map text to a stable number in [0, 1). Same input -> same number, always."""
+    # stable number in [0, 1) for a given text
     digest = hashlib.sha256(f"{salt}|{text_key(text)}".encode()).hexdigest()
     return int(digest[:15], 16) / 16**15
 
 
 def hash_sample(rows: Sequence[Row], n: int, salt: str) -> tuple[list[Row], list[Row]]:
-    """Deterministically pick `n` rows. Returns (picked, rest).
-
-    Sorting by hash bucket is equivalent to a seeded shuffle, but it does not
-    depend on row order. n <= 0 or n >= len(rows) picks everything.
-    """
+    # pick n rows by hash order (like a seeded shuffle but order-independent).
+    # n <= 0 means take everything
     if n <= 0 or n >= len(rows):
         return list(rows), []
     ranked = sorted(rows, key=lambda r: bucket(r["text"], salt))
@@ -119,7 +96,6 @@ def hash_sample(rows: Sequence[Row], n: int, salt: str) -> tuple[list[Row], list
 
 
 def hash_split(rows: Iterable[Row], val_fraction: float, salt: str) -> tuple[list[Row], list[Row]]:
-    """Split rows into (train, val) by hash bucket."""
     train: list[Row] = []
     val: list[Row] = []
     for r in rows:
@@ -128,7 +104,6 @@ def hash_split(rows: Iterable[Row], val_fraction: float, salt: str) -> tuple[lis
 
 
 def dedupe(rows: Iterable[Row]) -> tuple[list[Row], int]:
-    """Keep the first row for each normalised text. Returns (rows, n_removed)."""
     seen: set[str] = set()
     kept: list[Row] = []
     removed = 0
@@ -143,12 +118,8 @@ def dedupe(rows: Iterable[Row]) -> tuple[list[Row], int]:
 
 
 def finalize(splits: Splits) -> dict[str, int]:
-    """Remove duplicates inside each split and leakage across splits.
-
-    Priority test > val > train: a text found in test is dropped from val and
-    train; a text found in val is dropped from train. Rows are then sorted by
-    id so the output files are byte-for-byte reproducible.
-    """
+    # dedup within each split, then remove overlap: test wins over val, val over train.
+    # sorting by id at the end keeps the output files byte-identical between runs
     stats: dict[str, int] = {}
     for name in SPLIT_NAMES:
         splits[name], removed = dedupe(splits[name])
@@ -169,12 +140,11 @@ def finalize(splits: Splits) -> dict[str, int]:
     return stats
 
 
-# ---------------------------------------------------------------- PII (Nemotron)
+# --- PII (Nemotron) ---
 
 
 def parse_spans(raw: Any) -> list[dict[str, Any]]:
-    """Nemotron stores spans as a string. It may be JSON or a Python literal
-    (single quotes), so try both. Already-parsed lists pass through."""
+    # spans column is a string, sometimes JSON, sometimes a python literal w/ single quotes
     if isinstance(raw, list):
         return raw
     if not raw:
@@ -182,27 +152,19 @@ def parse_spans(raw: Any) -> list[dict[str, Any]]:
     try:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
-        parsed = ast.literal_eval(raw)  # safe: only parses literals, never runs code
+        parsed = ast.literal_eval(raw)  # literal_eval, not eval -- doesn't run code
     if not isinstance(parsed, list):
         raise ValueError("spans must be a list")
     return parsed
 
 
 def convert_pii_row(row: Row) -> Row | None:
-    """Convert one Nemotron row to our format, or None if its spans are broken.
-
-    Each span is checked against the text: if text[start:end] does not match
-    the span's own text, the row is dropped. Scoring against wrong gold
-    offsets would make every scanner look worse (or better) than it is.
-
-    Two quirks in Nemotron-PII that are NOT broken offsets (found by checking
-    all 200k rows, 1.67M spans):
-      * numeric values (age, cvv) are stored as ints, e.g. 42 instead of "42",
-        so we compare str(value);
-      * some span texts are lower-cased ("spanish" for "Spanish" in the
-        document), so the comparison ignores case.
-    After both fixes every span in the dataset matches its offsets.
-    """
+    # returns None (row dropped) if any span's offsets don't match its text.
+    #
+    # first version dropped ~9.5% of rows. checked all 1.67M spans -- offsets
+    # were fine, the mismatches were two quirks:
+    #   - age / cvv values stored as ints (42 not "42") -> compare str()
+    #   - some span texts lowercased ("spanish" vs "Spanish") -> ignore case
     text = row.get("text") or ""
     if not text.strip():
         return None
@@ -231,7 +193,6 @@ def convert_pii_row(row: Row) -> Row | None:
 def build_pii(
     train_rows: Iterable[Row], test_rows: Iterable[Row], val_size: int, test_size: int, salt: str
 ) -> tuple[Splits, dict[str, int]]:
-    """Val is sampled from the official train split; test from the official test split."""
     stats: Counter[str] = Counter()
 
     def convert(rows: Iterable[Row]) -> list[Row]:
@@ -253,7 +214,7 @@ def build_pii(
     return splits, dict(stats)
 
 
-# ---------------------------------------------------------------- prompt injection
+# --- prompt injection ---
 
 
 def _labelled(rows: Iterable[Row], prefix: str, source: str, label: int | None = None) -> list[Row]:
@@ -276,8 +237,7 @@ def build_injection(
     val_fraction: float,
     salt: str,
 ) -> tuple[Splits, dict[str, int]]:
-    """deepset has no val split, so carve one from its train split.
-    Gandalf ships train/val/test; every Gandalf row is an attack (label 1)."""
+    # deepset has no val split so take one from its train. gandalf has all 3 splits.
     ds, gd = SOURCES["deepset"].repo, SOURCES["gandalf"].repo
     d_train, d_val = hash_split(_labelled(deepset_train, "inj", ds), val_fraction, salt)
     splits: Splits = {
@@ -288,12 +248,11 @@ def build_injection(
     return splits, finalize(splits)
 
 
-# ---------------------------------------------------------------- benign traffic
+# --- benign ---
 
 
 def build_benign(rows: Iterable[Row], salt: str) -> tuple[Splits, dict[str, int]]:
-    """Dolly instructions, split 80/10/10 by hash. Only the instruction is used:
-    it reads like something a user would type into a chat box."""
+    # only the instruction field -- it looks like what a user would type. 80/10/10
     splits: Splits = {name: [] for name in SPLIT_NAMES}
     src = SOURCES["dolly"].repo
     for r in rows:
@@ -308,11 +267,10 @@ def build_benign(rows: Iterable[Row], salt: str) -> tuple[Splits, dict[str, int]
     return splits, finalize(splits)
 
 
-# ---------------------------------------------------------------- download
+# --- download ---
 
 
 def resolve_revision(repo: str) -> str:
-    """Current commit hash of a dataset repo, so downloads can be pinned."""
     from huggingface_hub import HfApi
 
     sha = HfApi().dataset_info(repo).sha
@@ -322,7 +280,6 @@ def resolve_revision(repo: str) -> str:
 
 
 def hf_loader(revisions: dict[str, str]) -> Callable[[str, str], list[Row]]:
-    """Return load(source_key, split) that downloads a pinned split as a list of dicts."""
     from datasets import load_dataset
 
     def load(key: str, split: str) -> list[Row]:
@@ -332,9 +289,6 @@ def hf_loader(revisions: dict[str, str]) -> Callable[[str, str], list[Row]]:
         return [dict(r) for r in ds]
 
     return load
-
-
-# ---------------------------------------------------------------- summary + main
 
 
 def label_counts(task: str, rows: list[Row]) -> dict[str, int]:
@@ -369,7 +323,7 @@ def run(
     pii_test_size: int,
     injection_val_fraction: float,
 ) -> dict[str, Any]:
-    """Build every task and write the manifest. `load` is injectable for tests."""
+    # load is passed in so tests can use a fake loader instead of HF
     tasks: dict[str, Any] = {}
 
     print("PII")

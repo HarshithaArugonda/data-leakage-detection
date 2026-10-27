@@ -1,9 +1,4 @@
-"""Tests for overlap resolution, policy decisions and redaction.
-
-Most tests use a stub layer so they run in milliseconds and test our logic,
-not spaCy. The tests marked `requires_presidio` run the real stack.
-"""
-
+# most tests use a stub layer so they don't need spacy
 from data_leakage_detection.models import Action, Decision, Finding
 from data_leakage_detection.policy import Policy
 from data_leakage_detection.scanners.hybrid import SensitiveDataScanner, redact, resolve_overlaps
@@ -23,8 +18,6 @@ def f(entity: str, start: int, end: int, score: float = 0.9, text: str = "x") ->
 
 
 class StubLayer:
-    """A fake scanner that returns fixed findings."""
-
     name = "stub"
 
     def __init__(self, findings: list[Finding]) -> None:
@@ -148,6 +141,6 @@ def test_full_stack_allows_plain_question() -> None:
 
 @requires_presidio
 def test_presidio_only_misses_prefixed_secret() -> None:
-    """Documents why rules exist: stock Presidio has no AWS key recognizer."""
+    # this is why the regex layer exists
     r = SensitiveDataScanner.presidio_only().scan(fake("key ", "AKIA", "Z7QK3M9P2XWB4N6T"))
     assert all(x.entity_type != "AWS_ACCESS_KEY" for x in r.findings)

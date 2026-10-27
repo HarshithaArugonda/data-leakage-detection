@@ -1,10 +1,3 @@
-"""Load and validate the YAML policy file.
-
-The policy is plain data. Keeping it out of code means a security team can
-change "mask emails" to "block emails" without a deploy, and every eval run
-records exactly which policy produced its numbers.
-"""
-
 from __future__ import annotations
 
 import os
@@ -20,7 +13,7 @@ DEFAULT_POLICY_PATH = Path(__file__).resolve().parents[2] / "configs" / "policy.
 
 
 class PolicyError(ValueError):
-    """Raised when the policy file is missing fields or has bad values."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -32,17 +25,8 @@ class PresidioConfig:
 
 @dataclass(frozen=True)
 class Policy:
-    """Validated policy.
-
-    Attributes:
-        entity_actions: Entity type -> action.
-        default_action: Action for detected types not in `entity_actions`.
-        min_score: Findings below this score are dropped.
-        presidio: Presidio settings.
-    """
-
     entity_actions: dict[str, Action] = field(default_factory=dict)
-    default_action: Action = Action.MASK
+    default_action: Action = Action.MASK  # for types not listed in the yaml
     min_score: float = 0.5
     presidio: PresidioConfig = field(default_factory=PresidioConfig)
 
@@ -76,11 +60,7 @@ class Policy:
 
 
 def load_policy(path: str | Path | None = None) -> Policy:
-    """Read and validate a policy file.
-
-    Lookup order: the `path` argument, then $DLD_POLICY, then
-    configs/policy.yaml in the repo.
-    """
+    # explicit path > $DLD_POLICY > configs/policy.yaml
     policy_path = Path(path or os.environ.get("DLD_POLICY") or DEFAULT_POLICY_PATH)
     if not policy_path.exists():
         raise PolicyError(f"policy file not found: {policy_path}")

@@ -1,6 +1,3 @@
-"""Tests for the PII scoring rules. The scorer decides every number on the
-resume, so each rule from the module docstring has a test."""
-
 import json
 from pathlib import Path
 
@@ -27,7 +24,7 @@ def test_exact_match_counts_everywhere() -> None:
 
 
 def test_one_person_pred_covers_first_and_last_name() -> None:
-    """'Jason Smith' as one PERSON finds both gold spans and is one correct pred."""
+    # "Jason Smith" as one PERSON should cover both gold spans
     c = score_document([gold(0, 5, "PERSON"), gold(6, 11, "PERSON")], [pred("PERSON", 0, 11)])["PERSON"]
     assert c.gold_found == 2 and c.gold == 2
     assert c.pred == 1 and c.pred_correct == 1
@@ -76,7 +73,6 @@ def test_postprocess_drops_low_scores_and_overlaps() -> None:
 
 
 def test_evaluate_regex_layer_end_to_end(tmp_path: Path) -> None:
-    """Regex alone on two tiny docs: it should find the email and SSN, miss the name."""
     docs = [
         {"text": "Mail ana@x.io now", "spans": [gold(5, 13, "EMAIL_ADDRESS")]},
         {"text": "Ana, SSN 123-45-6788", "spans": [gold(0, 3, "PERSON"), gold(9, 20, "US_SSN")]},

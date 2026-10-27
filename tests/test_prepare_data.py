@@ -1,5 +1,3 @@
-"""Tests for dataset preparation. No network: a fake loader stands in for Hugging Face."""
-
 import json
 from pathlib import Path
 
@@ -116,7 +114,6 @@ def test_convert_pii_row_keeps_unmapped_as_none() -> None:
 
 
 def test_convert_pii_row_accepts_numeric_span_text() -> None:
-    """Nemotron stores ages / CVVs as ints. 42 must match the text "42"."""
     row = {
         "text": "Age: 42, CVV 731",
         "spans": "[{'start': 5, 'end': 7, 'text': 42, 'label': 'age'}, "

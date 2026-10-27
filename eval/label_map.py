@@ -1,11 +1,5 @@
-"""Map dataset PII labels to this project's entity types.
-
-Our policy and scanners use Presidio-style names (PERSON, EMAIL_ADDRESS, ...).
-Nemotron-PII uses its own lowercase labels. Only labels with a clear 1:1
-meaning get mapped. Everything else maps to None and is excluded from
-scoring, so we never grade a scanner on a type it was not built to find.
-"""
-
+# Nemotron label -> our entity type. Only clear 1:1 matches are mapped;
+# anything else becomes None and isn't scored.
 from __future__ import annotations
 
 NEMOTRON_TO_DLD: dict[str, str] = {
@@ -29,5 +23,4 @@ NEMOTRON_TO_DLD: dict[str, str] = {
 
 
 def map_nemotron_label(label: str) -> str | None:
-    """Return our entity type for a Nemotron label, or None if unmapped."""
     return NEMOTRON_TO_DLD.get(label.strip().lower())

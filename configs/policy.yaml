@@ -1,29 +1,19 @@
-# Data Leakage Detection policy.
-# Each detected entity type maps to one action:
-#   allow - leave it in the text
-#   mask  - replace with a placeholder like <EMAIL_ADDRESS_1>
-#   block - reject the whole message
-# If any entity in a message is "block", the whole message is blocked.
-# Tool allow-lists and roles get added here on Day 3 (tool-call proxy).
+# entity type -> allow / mask / block
+# one "block" entity blocks the whole message
 
 version: 1
 
-# Action for entity types that are detected but not listed below.
-default_action: mask
-
-# Findings below this score are ignored, whatever layer produced them.
+default_action: mask  # for types not listed below
 min_score: 0.5
 
 presidio:
   enabled: true
-  # spaCy NER model behind Presidio. en_core_web_sm is smaller but tags
-  # words like "Python" as LOCATION, so lg is used everywhere, CI included.
-  # Override with $DLD_SPACY_MODEL.
+  # sm model tagged "Python" as a LOCATION, so lg everywhere (CI too)
   spacy_model: en_core_web_lg
   score_threshold: 0.5
 
 entities:
-  # --- Secrets and credentials: never let these through ---
+  # secrets
   PRIVATE_KEY: block
   AWS_ACCESS_KEY: block
   GITHUB_TOKEN: block
@@ -37,14 +27,14 @@ entities:
   PASSWORD: block
   GENERIC_SECRET: block
 
-  # --- High-risk PII: block ---
+  # high-risk PII
   US_SSN: block
   CREDIT_CARD: block
   US_BANK_NUMBER: block
   IBAN_CODE: block
   US_PASSPORT: block
 
-  # --- Contact / identity PII: mask so the request can still go through ---
+  # contact/identity info: mask so the request still goes through
   EMAIL_ADDRESS: mask
   PHONE_NUMBER: mask
   PERSON: mask
@@ -52,7 +42,7 @@ entities:
   IP_ADDRESS: mask
   US_DRIVER_LICENSE: mask
 
-  # --- Usually harmless on their own ---
+  # usually harmless on its own
   DATE_TIME: allow
   URL: allow
   NRP: allow   # nationality / religious / political group

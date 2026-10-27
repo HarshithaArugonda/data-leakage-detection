@@ -1,5 +1,3 @@
-"""Detection layers: regex rules, Presidio, and the hybrid combiner."""
-
 from data_leakage_detection.scanners.base import RegexRule, RegexScanner, Scanner
 from data_leakage_detection.scanners.hybrid import SensitiveDataScanner
 from data_leakage_detection.scanners.pii import PII_RULES, PresidioScanner, pii_regex_scanner
