@@ -16,7 +16,7 @@ from data_leakage_detection.scanners import SensitiveDataScanner
 
 scanner = SensitiveDataScanner()  # uses configs/policy.yaml
 r = scanner.scan("I'm Priya, email priya@acme.io")
-r.decision       # redact
+r.decision  # redact
 r.redacted_text  # "I'm <PERSON_1>, email <EMAIL_ADDRESS_1>"
 ```
 
