@@ -91,7 +91,7 @@ class SensitiveDataScanner:
     def _default_layers(policy: Policy) -> list[Scanner]:
         layers: list[Scanner] = [RegexScanner(SECRET_RULES + PII_RULES, name="regex")]
         if policy.presidio.enabled:
-            layers.append(_presidio_from_policy(policy))
+            layers.append(presidio_from_policy(policy))
         return layers
 
     @classmethod
@@ -103,7 +103,7 @@ class SensitiveDataScanner:
     def presidio_only(cls, policy: Policy | None = None) -> SensitiveDataScanner:
         """Baseline: stock Presidio, none of our rules."""
         policy = policy or load_policy()
-        return cls(policy, [_presidio_from_policy(policy)])
+        return cls(policy, [presidio_from_policy(policy)])
 
     def find(self, text: str) -> list[Finding]:
         """All findings after score filtering and overlap resolution."""
@@ -138,7 +138,7 @@ class SensitiveDataScanner:
         return ScanResult(decision, redacted, findings, actions, reasons)
 
 
-def _presidio_from_policy(policy: Policy) -> PresidioScanner:
+def presidio_from_policy(policy: Policy) -> PresidioScanner:
     model = os.environ.get("DLD_SPACY_MODEL") or policy.presidio.spacy_model
     # Ask Presidio only for entity types the policy names; it skips any it
     # does not support (our secret types).
