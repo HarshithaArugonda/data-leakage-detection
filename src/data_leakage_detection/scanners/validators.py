@@ -38,3 +38,18 @@ def ssn_valid(value: str) -> bool:
         return False
     # well-known fake / sample SSNs
     return digits not in {"078051120", "219099999", "123456789"}
+
+
+def looks_like_password(value: str) -> bool:
+    # links aren't passwords
+    if value.lower().startswith(("http", "www")):
+        return False
+    # $PASSWORD, {password} etc. are placeholders, not real values
+    if value.startswith(("$", "{")):
+        return False
+    has_digit = any(c.isdigit() for c in value)
+    has_symbol = any(not c.isalnum() for c in value)
+    # plain words like "strong" or "must"
+    if not has_digit and not has_symbol:
+        return False
+    return True
