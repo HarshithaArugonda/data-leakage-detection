@@ -22,6 +22,12 @@ def found(text: str) -> list[tuple[str, str]]:
         ("card 4111 1111 1111 1111 exp 12/29", "CREDIT_CARD", "4111 1111 1111 1111"),
         ("amex 378282246310005", "CREDIT_CARD", "378282246310005"),
         ("server at 192.168.1.20", "IP_ADDRESS", "192.168.1.20"),
+        # non-luhn card number is ok when a card word is right before it
+        ("Credit/Debit Card Number: 4929 3756 1245 6789", "CREDIT_CARD", "4929 3756 1245 6789"),
+        ("My account number is 982375612489.", "US_BANK_NUMBER", "982375612489"),
+        ("**Account Number:** 527-834-1692", "US_BANK_NUMBER", "527-834-1692"),
+        ("the account number C752198463.", "US_BANK_NUMBER", "C752198463"),
+        ("Bank Account: 5983214760", "US_BANK_NUMBER", "5983214760"),
     ],
 )
 def test_detects_pii(text: str, entity: str, value: str) -> None:
@@ -37,6 +43,9 @@ def test_detects_pii(text: str, entity: str, value: str) -> None:
         ("version 999.1.2.3", "IP_ADDRESS"),  # octet > 255
         ("call 123-555-0182", "PHONE_NUMBER"),  # area code can't start with 1
         ("dates 2026-10-22", "PHONE_NUMBER"),
+        ("tracking number 1234567890123456", "CREDIT_CARD"),  # no luhn, no card word
+        ("the account is 3 days old", "US_BANK_NUMBER"),
+        ("open account settings", "US_BANK_NUMBER"),
     ],
 )
 def test_rejects_lookalikes(text: str, entity: str) -> None:

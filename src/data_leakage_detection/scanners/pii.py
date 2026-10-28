@@ -63,6 +63,25 @@ PII_RULES: list[RegexRule] = [
         0.9,
         validator=luhn_valid,
     ),
+    # same digits without luhn, but only right after a card word. lower score.
+    # (nemotron's fake cards mostly fail luhn -- only 56/443 in val pass)
+    RegexRule(
+        "CREDIT_CARD",
+        re.compile(
+            r"(?i)\b(?:card|visa|mastercard|amex|credit|debit|cc)\b[^\d\n]{0,25}"
+            r"(?P<value>\d(?:[ -]?\d){12,18})(?![\d-])"
+        ),
+        0.75,
+    ),
+    # bank account numbers have no fixed format, so require "account number" etc. before it
+    RegexRule(
+        "US_BANK_NUMBER",
+        re.compile(
+            r"(?i)\b(?:account|acct|a/c)(?:\s*(?:number|no\.?|num|#))?[^\w\n]{0,4}(?:(?:is|was)\s+)?"
+            r"(?P<value>[A-Z]{0,3}\d[\d-]{5,20}\d)\b"
+        ),
+        0.8,
+    ),
     RegexRule(
         "IP_ADDRESS",
         re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])"),
